@@ -3,7 +3,9 @@ import { contextBridge, ipcRenderer } from "electron";
 contextBridge.exposeInMainWorld("screenShare", {
 	platform: process.platform,
 	sources: () => ipcRenderer.invoke("capture:sources"),
-	setCaptureSource: (sourceId: string) => ipcRenderer.invoke("capture:set-source", sourceId),
+	setCaptureSource: (sourceId: string, audio?: boolean) => ipcRenderer.invoke("capture:set-source", sourceId, audio),
+	screenPermission: () => ipcRenderer.invoke("capture:permission"),
+	openScreenPermissionSettings: () => ipcRenderer.invoke("capture:open-permission-settings"),
 	hostname: () => ipcRenderer.invoke("system:hostname"),
 	audioApps: () => ipcRenderer.invoke("capture:audio-apps"),
 	startAudioLoopback: (sourceId: string | undefined, filter: { mode: string; apps: string[] }) =>

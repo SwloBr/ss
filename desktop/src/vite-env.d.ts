@@ -26,12 +26,15 @@ declare global {
 	};
 	type AudioApp = { pid: number; name: string; exe: string };
 	type AudioFilterSettings = { mode: "all" | "include" | "exclude"; apps: string[] };
+	type ScreenPermissionStatus = "not-determined" | "granted" | "denied" | "restricted" | "unknown";
 	type DesktopPlatform = "win32" | "linux" | "darwin" | "freebsd" | "unknown";
 	interface Window {
 		screenShare: {
 			platform: DesktopPlatform;
 			sources(): Promise<CaptureSource[]>;
-			setCaptureSource(sourceId: string): Promise<boolean>;
+			setCaptureSource(sourceId: string, audio?: boolean): Promise<boolean>;
+			screenPermission(): Promise<ScreenPermissionStatus>;
+			openScreenPermissionSettings(): Promise<boolean>;
 			hostname(): Promise<string>;
 			audioApps(): Promise<AudioApp[]>;
 			startAudioLoopback(sourceId: string | undefined, filter: AudioFilterSettings): Promise<boolean>;
