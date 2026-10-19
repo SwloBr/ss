@@ -48,6 +48,7 @@ var idCounter atomic.Uint64
 
 func newSettingEngine(publicIP string) webrtc.SettingEngine {
 	settings := webrtc.SettingEngine{}
+	settings.SetLite(true)
 	if publicIP != "" {
 		settings.SetNAT1To1IPs([]string{publicIP}, webrtc.ICECandidateTypeHost)
 	}
