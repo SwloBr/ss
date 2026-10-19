@@ -29,7 +29,7 @@ declare global {
 	type ScreenPermissionStatus = "not-determined" | "granted" | "denied" | "restricted" | "unknown";
 	type DesktopPlatform = "win32" | "linux" | "darwin" | "freebsd" | "unknown";
 	interface Window {
-		screenShare: {
+		screenShare?: {
 			platform: DesktopPlatform;
 			sources(): Promise<CaptureSource[]>;
 			setCaptureSource(sourceId: string, audio?: boolean): Promise<boolean>;

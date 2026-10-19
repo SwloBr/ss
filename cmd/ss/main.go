@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os/signal"
@@ -63,14 +64,9 @@ func main() {
 		limiter: newIPRateLimiter(cfg.wsRateLimit, cfg.maxWSPerIP),
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", s.handleWebSocket)
-	mux.HandleFunc("/healthz", healthHandler)
-	mux.Handle("/", securityHeaders(http.FileServer(http.FS(web.FS))))
-
 	httpServer := &http.Server{
 		Addr:              cfg.addr,
-		Handler:           mux,
+		Handler:           s.routes(web.FS),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
@@ -114,4 +110,13 @@ func main() {
 	if udpMux != nil {
 		_ = udpMux.Close()
 	}
+}
+
+func (s *server) routes(files fs.FS) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", s.handleWebSocket)
+	mux.HandleFunc("/healthz", healthHandler)
+	spa := newSPAHandler(files, web.FallbackPage)
+	mux.Handle("/", securityHeaders(spa, spa.scripts...))
+	return mux
 }

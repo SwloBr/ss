@@ -14,6 +14,7 @@ import {
 	type SourceType,
 	videoBitrate,
 } from "./types";
+import { desktop, isDesktop, platform } from "@/lib/platform";
 
 type RoomClientRef = { current: RoomClient | undefined };
 
@@ -108,6 +109,18 @@ const loadAudioSettings = (): AudioSettings => {
 	}
 };
 
+const captureBrowserDisplay = async (video: MediaTrackConstraints, audio: boolean) => {
+	if (typeof navigator.mediaDevices?.getDisplayMedia !== "function") {
+		throw new Error("Este navegador não permite compartilhar a tela");
+	}
+	return navigator.mediaDevices.getDisplayMedia({
+		video,
+		audio: audio ? ({ suppressLocalAudioPlayback: false } as MediaTrackConstraints) : false,
+		selfBrowserSurface: "exclude",
+		systemAudio: "include",
+	} as DisplayMediaStreamOptions);
+};
+
 export function useScreenCapture({ client, server, room, onStatus }: ScreenCaptureOptions) {
 	const [local, setLocal] = useState<MediaStream | null>(null);
 	const [sharing, setSharing] = useState(false);
@@ -166,17 +179,18 @@ export function useScreenCapture({ client, server, room, onStatus }: ScreenCaptu
 			void audioContextRef.current.close().catch(() => undefined);
 			audioContextRef.current = null;
 		}
-		if (window.screenShare?.stopAudioLoopback) {
-			void window.screenShare.stopAudioLoopback().catch(() => undefined);
+		if (desktop?.stopAudioLoopback) {
+			void desktop.stopAudioLoopback().catch(() => undefined);
 		}
 	};
 
 	const loadSources = async () => {
 		setPickerOpen(true);
+		if (!desktop) return;
 		setLoadingSources(true);
 		const requestID = ++sourceRequest.current;
 		try {
-			const available = await window.screenShare.sources();
+			const available = await desktop.sources();
 			if (sourceRequest.current !== requestID) return;
 			const current = available.find((source) => source.id === selectedSourceIDRef.current);
 			const next = current ?? available.find((source) => source.kind === "screen") ?? available[0];
@@ -218,9 +232,10 @@ export function useScreenCapture({ client, server, room, onStatus }: ScreenCaptu
 	const startSharing = async () => {
 		const source = sourcesRef.current.find((item) => item.id === selectedSourceIDRef.current);
 		const roomClient = client.current;
-		const isLinux = window.screenShare.platform === "linux";
-		const isMac = window.screenShare.platform === "darwin";
-		if ((!source && !isLinux) || !roomClient) {
+		const isLinux = platform === "linux";
+		const isMac = platform === "darwin";
+		const usesSystemPicker = isLinux || !isDesktop;
+		if ((!source && !usesSystemPicker) || !roomClient) {
 			onStatusRef.current("Selecione uma tela ou janela para compartilhar");
 			return;
 		}
@@ -245,10 +260,10 @@ export function useScreenCapture({ client, server, room, onStatus }: ScreenCaptu
 		cleanupAudio();
 		let stream: MediaStream | undefined;
 		try {
-			if (source) await window.screenShare.setCaptureSource(source.id, audioModeValue === "system");
+			if (source) await desktop?.setCaptureSource(source.id, audioModeValue === "system");
 			const isWindow = source?.kind === "window";
 			const audioSource = source && (isWindow ? source : (sourcesRef.current.find((item) => item.kind === "screen") ?? source));
-			if (audioModeValue === "system" && !isLinux && !audioSource) {
+			if (audioModeValue === "system" && !usesSystemPicker && !audioSource) {
 				throw new Error(
 					isWindow
 						? "Não foi possível encontrar a janela para capturar o áudio do aplicativo"
@@ -289,7 +304,7 @@ export function useScreenCapture({ client, server, room, onStatus }: ScreenCaptu
 						}
 					: {}),
 			};
-			if (capturesAudio && !desktopAudio && !isLinux) {
+			if (capturesAudio && !desktopAudio && !usesSystemPicker) {
 				throw new Error("Não foi possível encontrar a fonte de áudio da tela");
 			}
 			const captureLegacyDesktop = async (withAudio: boolean) => {
@@ -321,6 +336,8 @@ export function useScreenCapture({ client, server, room, onStatus }: ScreenCaptu
 			};
 
 			const startNativeAudio = async (): Promise<MediaStreamTrack | undefined> => {
+				if (!desktop) return undefined;
+				const bridge = desktop;
 				const audioCtx = new AudioContext({ sampleRate: 48000 });
 				audioContextRef.current = audioCtx;
 				if (audioCtx.state === "suspended") {
@@ -333,7 +350,7 @@ export function useScreenCapture({ client, server, room, onStatus }: ScreenCaptu
 				let audioFormat: AudioStreamFormat | undefined;
 				let audioDecodeErrorReported = false;
 
-				const unsubscribe = window.screenShare.onAudioChunk((chunk) => {
+				const unsubscribe = bridge.onAudioChunk((chunk) => {
 					if (audioContextRef.current !== audioCtx || audioCtx.state === "closed") return;
 					try {
 						const incoming = new Uint8Array(chunk.byteLength);
@@ -395,7 +412,7 @@ export function useScreenCapture({ client, server, room, onStatus }: ScreenCaptu
 				});
 
 				audioCleanupRef.current = unsubscribe;
-				const loopbackStarted = await window.screenShare.startAudioLoopback(source?.id, audioFilterValue);
+				const loopbackStarted = await bridge.startAudioLoopback(source?.id, audioFilterValue);
 				const audioTrack = destination.stream.getAudioTracks()[0];
 				if (!loopbackStarted || !audioTrack) {
 					roomDebug("native audio loopback unavailable; using Chromium desktop audio capture");
@@ -408,13 +425,16 @@ export function useScreenCapture({ client, server, room, onStatus }: ScreenCaptu
 
 			const nativeAudioAvailable =
 				capturesAudio &&
+				isDesktop &&
 				!isMac &&
 				(isLinux || Boolean(source && desktopVideo)) &&
-				typeof window.screenShare?.startAudioLoopback === "function" &&
-				typeof window.screenShare?.onAudioChunk === "function";
+				typeof desktop?.startAudioLoopback === "function" &&
+				typeof desktop?.onAudioChunk === "function";
 			const nativeAudioTrack = nativeAudioAvailable ? await startNativeAudio() : undefined;
 
-			if (isMac) {
+			if (!isDesktop) {
+				stream = await captureBrowserDisplay(displayVideo, capturesAudio);
+			} else if (isMac) {
 				stream = await navigator.mediaDevices.getDisplayMedia({ video: displayVideo, audio: capturesAudio });
 				if (capturesAudio && stream.getAudioTracks().length === 0) {
 					stopTracks(stream);

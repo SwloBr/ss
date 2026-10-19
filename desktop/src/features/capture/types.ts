@@ -48,6 +48,7 @@ export type SourcePickerProps = {
 	audioMode: AudioMode;
 	audioFilter: AudioFilter;
 	nativePicker: boolean;
+	browserPicker?: boolean;
 	loading: boolean;
 	starting: boolean;
 	onType: (type: SourceType) => void;
