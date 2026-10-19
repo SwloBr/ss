@@ -283,14 +283,8 @@ async function downloadAndQuit(window: BrowserWindow | null) {
 }
 
 export function registerUpdater() {
-	ipcMain.handle("update:check", async () => {
-		try {
-			return await checkForUpdate();
-		} catch (error) {
-			console.error("[Updater] Falha ao verificar atualização:", error);
-			return { status: "error", message: error instanceof Error ? error.message : "Falha ao verificar atualização" } satisfies UpdateCheckResult;
-		}
-	});
+	// ponytail: updater desligado no fork (apontava pro upstream); religar trocando REPO_API pro SwloBr/ss
+	ipcMain.handle("update:check", () => ({ status: "up-to-date", currentVersion: app.getVersion() }) satisfies UpdateCheckResult);
 	ipcMain.handle("update:changelog", async () => {
 		try {
 			return await fetchChangelog();
@@ -300,5 +294,5 @@ export function registerUpdater() {
 		}
 	});
 	ipcMain.handle("update:changes", (_event, tag: string, previousTag: string) => fetchChanges(tag, previousTag));
-	ipcMain.handle("update:download", (event) => downloadAndQuit(BrowserWindow.fromWebContents(event.sender)));
+	ipcMain.handle("update:download", () => undefined);
 }

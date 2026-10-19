@@ -21,6 +21,8 @@ export default defineConfig({
 	plugins: [tanstackStart({ spa: { enabled: true } }), react(), tailwindcss(), ...(webTarget ? [keepWebDist()] : [])],
 	resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
 	base: webTarget ? "/" : "./",
+	// Prerender do TanStack Start busca em localhost; no container localhost não casa com o bind (IPv4 x IPv6).
+	preview: { host: "127.0.0.1" },
 	build: webTarget
 		? { outDir: "dist-web", minify: true, cssMinify: true, sourcemap: false }
 		: {
